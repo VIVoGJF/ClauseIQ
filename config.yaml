@@ -3,11 +3,8 @@
 # =========================
 
 # Paths for external dependencies
-tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"   # Windows
-# tesseract_cmd: ""   # Leave empty if already in PATH (Linux/Mac)
-
-poppler_path: "C:/Program Files/poppler-24.02.0/Library/bin"    # Windows (adjust version)
-# poppler_path: ""    # Leave empty if already in PATH (Linux/Mac)
+tesseract_cmd: ""   # Leave empty for Linux/Cloud
+poppler_path: ""    # Leave empty for Linux/Cloud
 
 # Input/output directories
 input_dir: "data/input_docs"
