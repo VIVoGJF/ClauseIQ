@@ -1,3 +1,4 @@
+# core/risks.py
 import re
 
 RISK_KEYWORDS = {
@@ -12,12 +13,12 @@ RISK_KEYWORDS = {
     "Automatic Renewal": r"auto-?renewal|automatic renewal|renewal term|extension of contract",
     "Legal Fees & Costs": r"advocate fees|legal fees|court costs|litigation expenses",
     "Employment / Labour Risks": r"non-compete|non compete|non-solicit|non solicit|employee|employment|labour|industrial dispute",
-    "Governing Law / Jurisdiction (India)": r"governing law|laws of India|Indian Penal Code|IPC|jurisdiction of.*India|court of.*India|Supreme Court|High Court|Arbitration and Conciliation Act",
+    "Governing Law / Jurisdiction (India)": r"governing law|laws of India|Indian Penal Code|IPC|jurisdiction of.{0,50}India|court of.{0,50}India|Supreme Court|High Court|Arbitration and Conciliation Act",
 }
 
 
 def analyze_risks(text: str) -> dict:
-
+    
     risks = {}
 
     for category, pattern in RISK_KEYWORDS.items():
@@ -28,6 +29,17 @@ def analyze_risks(text: str) -> dict:
             snippet = text[start:end].replace("\n", " ").strip()
             matches.append(snippet)
         if matches:
-            risks[category] = list(set(matches))  # deduplicate
+            risks[category] = list(set(matches))
 
     return risks if risks else {"No obvious risks detected": []}
+
+
+def extract_risk_categories(text: str) -> str:
+
+    matched = []
+
+    for category, pattern in RISK_KEYWORDS.items():
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            matched.append(category)
+
+    return ", ".join(matched) if matched else "None"

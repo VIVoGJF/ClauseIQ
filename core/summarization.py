@@ -2,25 +2,24 @@
 import re
 import json
 import ast
-from pathlib import Path
 from dotenv import load_dotenv
 import os
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 
 # -------------------------
 # Load API key
 # -------------------------
 load_dotenv()
-api_key = os.getenv("GOOGLE_API_KEY")
+api_key = os.getenv("GROQ_API_KEY")
 
 if not api_key:
-    raise RuntimeError("GOOGLE_API_KEY not found. Please set it in .env or environment variables.")
+    raise RuntimeError("GROQ_API_KEY not found. Please set it in .env or environment variables.")
 
 # -------------------------
 # LLM Wrapper
 # -------------------------
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",
     temperature=0,
     max_retries=2,
     api_key=api_key
@@ -65,9 +64,6 @@ def summarize_document(text: str, entities: dict, risks: dict, max_attempts: int
     Passes extracted text/entities/risks to Gemini and returns a clean JSON string.
     """
 
-    ent_text = json.dumps(entities, ensure_ascii=False, indent=2)
-    risks_text = json.dumps(risks, ensure_ascii=False, indent=2)
-
     prompt = f"""
     You are a legal assistant.
 
@@ -77,10 +73,10 @@ def summarize_document(text: str, entities: dict, risks: dict, max_attempts: int
     {text}
 
     --- Entities ---
-    {entities}
+    {json.dumps(entities, ensure_ascii=False)}
 
     --- Risks ---
-    {risks}
+    {json.dumps(risks, ensure_ascii=False)}
 
     Task:
     1. Fix grammar and improve readability of the summary and other entities.
@@ -120,7 +116,7 @@ def summarize_document(text: str, entities: dict, risks: dict, max_attempts: int
             resp = llm.invoke(prompt)
             response_text = getattr(resp, "content", None) or getattr(resp, "text", None) or str(resp)
         except Exception as e:
-            print(f"[Gemini error attempt {attempt+1}]: {e}")
+            print(f"[Groq error attempt {attempt+1}]: {e}")
             continue
 
         if not response_text:

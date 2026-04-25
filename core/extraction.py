@@ -1,38 +1,61 @@
 from pathlib import Path
-import pdfplumber
-from pdf2image import convert_from_path
+import os
+import fitz  # PyMuPDF
 import pytesseract
-import yaml
 from PIL import Image
+import io
 
 # -------------------------
-# Load config.yaml
+# Tesseract path config
 # -------------------------
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
-
-with open(CONFIG_PATH, "r") as f:
-    config = yaml.safe_load(f)
-
-# Apply Tesseract config if available
-if config.get("tesseract_cmd"):
-    pytesseract.pytesseract.tesseract_cmd = config["tesseract_cmd"]
-
-# Poppler path for pdf2image
-POPLER_PATH = config.get("poppler_path") or None
+if os.name == "nt":  # Windows
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+else:  # Linux / Mac / Render / Docker
+    pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
 
-def _ocr_page_image(img: Image.Image) -> str:
-    """Run pytesseract OCR on a PIL Image and return text (str)."""
+# -------------------------
+# Internal helpers
+# -------------------------
+def _extract_text_pymupdf(page: fitz.Page) -> str:
+    """Extract selectable text from a PyMuPDF page object."""
+    return page.get_text("text") or ""
+
+
+def _page_to_pil(page: fitz.Page, dpi: int = 300) -> Image.Image:
+    """Render a PyMuPDF page to a PIL Image for OCR."""
+    zoom = dpi / 72  # 72 is PyMuPDF's default DPI
+    mat = fitz.Matrix(zoom, zoom)
+    pixmap = page.get_pixmap(matrix=mat)
+    img_bytes = pixmap.tobytes("png")
+    return Image.open(io.BytesIO(img_bytes))
+
+
+def _ocr_page(page: fitz.Page) -> str:
+    """Render page to image and run Tesseract OCR on it."""
+    img = _page_to_pil(page)
     return pytesseract.image_to_string(img)
 
 
+# -------------------------
+# Core extraction
+# -------------------------
 def extract_text_pages(pdf_path: str, use_ocr: bool = True) -> list[str]:
     """
-    Extract text per page from PDF.
+    Extract text per page from a PDF.
 
-    Returns: list of strings, one entry per page (empty string if nothing found).
-    - First tries pdfplumber (selectable text).
-    - If no text and use_ocr=True, runs OCR on that page.
+    Strategy per page:
+        1. Try PyMuPDF text extraction (fast, layout-aware).
+        2. If PyMuPDF fails or returns < 10 chars and use_ocr=True,
+           fall back to Tesseract OCR via PyMuPDF page rendering.
+        3. If OCR also fails, return empty string for that page (no crash).
+
+    Args:
+        pdf_path: Path to the PDF file.
+        use_ocr:  Whether to fall back to Tesseract OCR. Default True.
+
+    Returns:
+        list[str] — one string per page, stripped.
     """
     pdf_file = Path(pdf_path)
     if not pdf_file.exists():
@@ -40,40 +63,36 @@ def extract_text_pages(pdf_path: str, use_ocr: bool = True) -> list[str]:
 
     pages_text: list[str] = []
 
-    # First attempt: extract with pdfplumber page-by-page
-    with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
+    with fitz.open(str(pdf_file)) as doc:
+        for page_num, page in enumerate(doc, start=1):
+
+            # ── Step 1: PyMuPDF ──────────────────────────────────────────
+            text = ""
             try:
-                text = page.extract_text() or ""
-            except Exception:
-                text = ""
-            pages_text.append(text)
+                text = _extract_text_pymupdf(page)
+            except Exception as e:
+                print(f"[PyMuPDF] Failed on page {page_num}: {e}")
 
-    # If OCR requested, run OCR for pages with no/low text
-    if use_ocr:
-        for idx, page_text in enumerate(pages_text):
-            if not page_text.strip() or len(page_text.strip()) < 10:
-                page_number = idx + 1
+            # ── Step 2: OCR fallback ──────────────────────────────────────
+            if use_ocr and (not text.strip() or len(text.strip()) < 10):
                 try:
-                    images = convert_from_path(
-                        str(pdf_file),
-                        dpi=300,
-                        first_page=page_number,
-                        last_page=page_number,
-                        poppler_path=POPLER_PATH,
-                    )
-                    if images:
-                        ocr_text = _ocr_page_image(images[0])
-                        pages_text[idx] = page_text + "\n" + ocr_text.strip()
+                    print(f"[OCR] Falling back to Tesseract on page {page_num}")
+                    ocr_text = _ocr_page(page)
+                    text = text + "\n" + ocr_text.strip()
                 except Exception as e:
-                    print(f"[OCR] Failed on page {page_number}: {e}")
+                    print(f"[OCR] Failed on page {page_num}: {e}")
 
-    return [p.strip() for p in pages_text]
+            pages_text.append(text.strip())
+
+    return pages_text
 
 
 def extract_text_from_pdf(pdf_path: str, use_ocr: bool = True) -> str:
     """
-    Convenience wrapper that returns full text (joined with page markers).
+    Convenience wrapper — returns full text joined with page markers.
+
+    Returns:
+        Single string with --- Page N --- markers between pages.
     """
     pages = extract_text_pages(pdf_path, use_ocr=use_ocr)
 
@@ -84,4 +103,3 @@ def extract_text_from_pdf(pdf_path: str, use_ocr: bool = True) -> str:
     for i, p in enumerate(pages, start=1):
         joined.append(f"\n--- Page {i} ---\n{p}")
     return "\n".join(joined).strip()
-
