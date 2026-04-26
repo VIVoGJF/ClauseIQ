@@ -1,15 +1,32 @@
-spacy
-pdfplumber
-sumy
-reportlab
-google-generativeai
-langchain
-langchain-community
-langchain-openai
-langchain_google_genai
-pypdf
-pdf2image 
-pytesseract 
-Pillow
-streamlit
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
+# Core NLP
+spacy==3.8.7
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
+
+# PDF
+PyMuPDF==1.27.2.3
+pytesseract==0.3.13
+Pillow==11.3.0
+reportlab==4.4.4
+
+# LangChain
+langchain==0.3.27
+langchain-community==0.3.29
+langchain-core==0.3.84
+langchain-groq==0.2.4
+langchain-openai==0.3.16
+langchain-text-splitters==0.3.11
+
+# LLM / Embeddings
+groq==0.37.1
+openai==1.108.1
+
+# Vector store
+pinecone
+langchain-pinecone==0.2.13
+
+# API
+fastapi
+uvicorn
+
+# Utils
+python-dotenv

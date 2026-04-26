@@ -1,11 +1,15 @@
 import streamlit as st
 from pathlib import Path
 import json
-from core.extraction import extract_text_from_pdf
+import uuid
+from core.extraction import extract_text_from_pdf, extract_text_pages
 from core.entities import extract_entities
 from core.risks import analyze_risks
 from core.summarization import summarize_document
 from core.pdf_writer import save_json_to_pdf
+from rag.chunking import chunk_pages
+from rag.store import upsert_chunks
+from rag.qa import answer
 
 st.set_page_config(page_title="AI Legal Document Analyzer", layout="wide")
 
@@ -18,18 +22,24 @@ if "json_result" not in st.session_state:
     st.session_state.json_result = None
 if "pdf_path" not in st.session_state:
     st.session_state.pdf_path = None
+if "doc_id" not in st.session_state:
+    st.session_state.doc_id = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 
 def reset_app():
     st.session_state.analysis_done = False
     st.session_state.json_result = None
     st.session_state.pdf_path = None
+    st.session_state.doc_id = None
+    st.session_state.chat_history = []
 
 
 st.title("📑 AI Legal Document Summarizer")
 
 # -----------------------
-# Upload stage (cozy centered box)
+# Upload stage
 # -----------------------
 if not st.session_state.analysis_done:
     st.markdown(
@@ -85,12 +95,12 @@ if not st.session_state.analysis_done:
                 f.write(uploaded_file.getbuffer())
 
             # Pipeline: Extract → Entities → Risks → Summarize
-            text = extract_text_from_pdf(input_path, use_ocr=True)
+            pages = extract_text_pages(str(input_path), use_ocr=True)
+            text = "\n".join(pages)
             entities = extract_entities(text)
             risks = analyze_risks(text)
             json_result = summarize_document(text, entities, risks)
 
-            # Save JSON result
             st.session_state.json_result = json.loads(json_result)
 
             # Save PDF
@@ -99,9 +109,15 @@ if not st.session_state.analysis_done:
             save_json_to_pdf(json_result, filename=str(pdf_path))
             st.session_state.pdf_path = pdf_path
 
-            st.session_state.analysis_done = True
-            st.rerun()
+        # Index for RAG separately so user sees summary faster
+        with st.spinner("🔍 Indexing document for Q&A…"):
+            doc_id = str(uuid.uuid4())
+            chunks = chunk_pages(pages, doc_id)
+            upsert_chunks(chunks, doc_id)
+            st.session_state.doc_id = doc_id
 
+        st.session_state.analysis_done = True
+        st.rerun()
 
 
 # -----------------------
@@ -112,7 +128,6 @@ else:
 
     st.subheader("✅ Final AI-Enhanced Analysis")
 
-    # Display results in clean sections
     st.markdown("### 📝 Summary")
     st.write(data.get("summary", "Not available"))
 
@@ -131,7 +146,7 @@ else:
     st.markdown("### ⚖️ Risks")
     st.markdown(data.get("risks", "Not available"), unsafe_allow_html=True)
 
-    st.markdown("### 💡Suggestions")
+    st.markdown("### 💡 Suggestions")
     st.info(data.get("suggestion", "No suggestions provided."))
 
     with open(st.session_state.pdf_path, "rb") as f:
@@ -144,5 +159,40 @@ else:
         mime="application/pdf",
     )
 
-    # Reset button
+    st.divider()
+
+    # -----------------------
+    # RAG Q&A section
+    # -----------------------
+    st.markdown("### 🤖 Ask Questions About This Document")
+
+    # Display chat history
+    for entry in st.session_state.chat_history:
+        with st.chat_message("user"):
+            st.write(entry["question"])
+        with st.chat_message("assistant"):
+            st.write(entry["answer"])
+            cols = st.columns(3)
+            cols[0].caption(f"📄 Pages: {', '.join(str(p) for p in entry['pages']) or 'N/A'}")
+            cols[1].caption(f"🎯 Confidence: {entry['confidence']}")
+            if entry["caveat"] and entry["caveat"].lower() != "none":
+                cols[2].caption(f"⚠️ {entry['caveat']}")
+
+    # Input
+    question = st.chat_input("Ask something about this document…")
+    if question:
+        with st.spinner("Thinking…"):
+            result = answer(
+                question=question,
+                doc_id=st.session_state.doc_id,
+            )
+        st.session_state.chat_history.append({
+            "question": question,
+            "answer": result["answer"],
+            "pages": result["relevant_pages"],
+            "confidence": result["confidence"],
+            "caveat": result["caveat"],
+        })
+        st.rerun()
+
     st.button("🔄 Upload Another Document", on_click=reset_app)
