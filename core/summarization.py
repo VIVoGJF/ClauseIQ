@@ -104,7 +104,7 @@ def summarize_document(text: str, entities: dict, risks: dict, max_attempts: int
         example: sometimes extracted text from pdf can refer "KIIT" as "KUT" or "valid" as "valicl".
         such things should be reanalysed and fixed throughout the document).
     the entities (parties, date/time, money/penalties, obligations) as well as risks should return plain text, not inside [].
-    if data is not available for any of the fields,return few words that might be relevant insted of none.
+    if data is not available for any of the fields (or very less data : example only the word 'maybe' in obligations ),return few words that might be relevant insted of none.
     DO NOT return any confidential information like party phone numbers, addresses(email can be returned as it necessary for further communication).
     """
 
