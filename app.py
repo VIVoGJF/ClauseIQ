@@ -2,7 +2,7 @@ import streamlit as st
 from pathlib import Path
 import json
 import uuid
-from core.extraction import extract_text_from_pdf, extract_text_pages
+from core.extraction import extract_text_pages
 from core.entities import extract_entities
 from core.risks import analyze_risks
 from core.summarization import summarize_document
@@ -11,7 +11,7 @@ from rag.chunking import chunk_pages
 from rag.store import upsert_chunks
 from rag.qa import answer
 
-st.set_page_config(page_title="AI Legal Document Analyzer", layout="wide")
+st.set_page_config(page_title="ClauseIQ", layout="wide")
 
 # -----------------------
 # Session state setup
@@ -26,6 +26,8 @@ if "doc_id" not in st.session_state:
     st.session_state.doc_id = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "filename" not in st.session_state:
+    st.session_state.filename = None
 
 
 def reset_app():
@@ -34,9 +36,10 @@ def reset_app():
     st.session_state.pdf_path = None
     st.session_state.doc_id = None
     st.session_state.chat_history = []
+    st.session_state.filename = None
 
 
-st.title("📑 AI Legal Document Summarizer")
+st.title("📑 ClauseIQ")
 
 # -----------------------
 # Upload stage
@@ -85,48 +88,66 @@ if not st.session_state.analysis_done:
         type=["pdf"],
         label_visibility="collapsed",
     )
+    
+    
 
     if uploaded_file:
-        with st.spinner("⚙️ Analyzing document… please wait."):
-            # Save uploaded file temporarily
+        st.success(f"📄 {uploaded_file.name} uploaded successfully.")
+        analyze = st.button("🔍 Analyze Document")
+
+        if analyze:
+            # Save uploaded file
+            st.session_state.filename = uploaded_file.name
             input_path = Path("data/input_docs") / uploaded_file.name
             input_path.parent.mkdir(parents=True, exist_ok=True)
             with open(input_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
             # Pipeline: Extract → Entities → Risks → Summarize
-            pages = extract_text_pages(str(input_path), use_ocr=True)
-            text = "\n".join(pages)
-            entities = extract_entities(text)
-            risks = analyze_risks(text)
-            json_result = summarize_document(text, entities, risks)
+            with st.spinner("⚙️ Analyzing document… please wait."):
+                pages = extract_text_pages(str(input_path), use_ocr=True)
+                text = "\n".join(pages)
+                entities = extract_entities(text)
+                risks = analyze_risks(text)
+                json_result = summarize_document(text, entities, risks)
 
-            st.session_state.json_result = json.loads(json_result)
+                st.session_state.json_result = json.loads(json_result)
 
-            # Save PDF
-            pdf_path = Path("data/output_docs") / "analysis_report.pdf"
-            pdf_path.parent.mkdir(parents=True, exist_ok=True)
-            save_json_to_pdf(json_result, filename=str(pdf_path))
-            st.session_state.pdf_path = pdf_path
+                # Save PDF
+                pdf_path = Path("data/output_docs") / "analysis_report.pdf"
+                pdf_path.parent.mkdir(parents=True, exist_ok=True)
+                save_json_to_pdf(json_result, filename=str(pdf_path))
+                st.session_state.pdf_path = pdf_path
 
-        # Index for RAG separately so user sees summary faster
-        with st.spinner("🔍 Indexing document for Q&A…"):
-            doc_id = str(uuid.uuid4())
-            chunks = chunk_pages(pages, doc_id)
-            upsert_chunks(chunks, doc_id)
-            st.session_state.doc_id = doc_id
+            # Index for RAG
+            with st.spinner("🔍 Indexing document for Q&A…"):
+                doc_id = str(uuid.uuid4())
+                chunks = chunk_pages(pages, doc_id)
+                upsert_chunks(chunks, doc_id)
+                st.session_state.doc_id = doc_id
 
-        st.session_state.analysis_done = True
-        st.rerun()
-
+            st.session_state.analysis_done = True
+            st.rerun()
 
 # -----------------------
 # Analysis stage
 # -----------------------
-else:
-    data = st.session_state.json_result
 
-    st.subheader("✅ Final AI-Enhanced Analysis")
+
+
+else:
+    # Guard against empty state during rerun
+    if not st.session_state.json_result:
+        st.stop()
+
+    data = st.session_state.json_result
+    
+    if st.session_state.filename:
+        st.success(f"📄 {st.session_state.filename} uploaded successfully.")
+        
+    st.divider()
+
+    st.subheader(f"✅ AI-Enhanced Analysis:")
 
     st.markdown("### 📝 Summary")
     st.write(data.get("summary", "Not available"))
@@ -159,6 +180,8 @@ else:
         mime="application/pdf",
     )
 
+    st.button("🔄 Upload Another Document", on_click=reset_app)
+
     st.divider()
 
     # -----------------------
@@ -166,19 +189,20 @@ else:
     # -----------------------
     st.markdown("### 🤖 Ask Questions About This Document")
 
-    # Display chat history
     for entry in st.session_state.chat_history:
         with st.chat_message("user"):
             st.write(entry["question"])
         with st.chat_message("assistant"):
-            st.write(entry["answer"])
+            st.markdown(entry["answer"])
+            st.divider()
             cols = st.columns(3)
             cols[0].caption(f"📄 Pages: {', '.join(str(p) for p in entry['pages']) or 'N/A'}")
-            cols[1].caption(f"🎯 Confidence: {entry['confidence']}")
+            confidence = entry["confidence"]
+            confidence_icon = {"high": "🟢", "medium": "🟡", "low": "🔴"}.get(confidence, "⚪")
+            cols[1].caption(f"{confidence_icon} Confidence: {confidence.title()}")
             if entry["caveat"] and entry["caveat"].lower() != "none":
                 cols[2].caption(f"⚠️ {entry['caveat']}")
 
-    # Input
     question = st.chat_input("Ask something about this document…")
     if question:
         with st.spinner("Thinking…"):
@@ -194,5 +218,3 @@ else:
             "caveat": result["caveat"],
         })
         st.rerun()
-
-    st.button("🔄 Upload Another Document", on_click=reset_app)

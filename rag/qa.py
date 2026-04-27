@@ -1,9 +1,11 @@
 # rag/qa.py
+import re
+import json
+import ast
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 from rag.store import get_retriever
 
@@ -27,6 +29,8 @@ You are a legal assistant specializing in Indian law.
 Answer the question using ONLY the context provided below.
 If the answer is not in the context, say "I could not find this in the document."
 Do not make up information.
+Fix any OCR errors in the context that might affect the answer
+ONLY return valid JSON. Do not include triple backticks or any extra text.
 
 Context:
 {context}
@@ -34,23 +38,49 @@ Context:
 Question:
 {question}
 
-Respond with:
-- answer: clear and concise answer (2-4 sentences)
-- relevant_pages: which pages the answer was found on
-- confidence: high / medium / low
-- caveat: any limitation or uncertainty in the answer (or "None")
+Return a single JSON with exactly these keys:
+- "answer": clear and concise plain English answer (2-4 sentences)
+- "confidence": exactly one of: high, medium, low
+- "caveat": one line limitation or uncertainty, or "None"
 """)
 
 # -------------------------
-# Helpers
+# Helpers — same pattern as summarization.py
 # -------------------------
+def _remove_code_fences(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?", "", text, flags=re.IGNORECASE).strip()
+        text = re.sub(r"```$", "", text).strip()
+    return text
+
+def _extract_first_json_block(text: str) -> str:
+    match = re.search(r"\{[\s\S]*\}", text)
+    return match.group(0) if match else text
+
+def _try_parse_json(text: str):
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    try:
+        obj = ast.literal_eval(text)
+        if isinstance(obj, dict):
+            return obj
+    except Exception:
+        pass
+    try:
+        repaired = re.sub(r"(?<!\\)\'", '"', text)
+        return json.loads(repaired)
+    except Exception:
+        return None
+
 def _format_docs(docs) -> str:
     parts = []
     for doc in docs:
         page = doc.metadata.get("page", "?")
         parts.append(f"[Page {page}]\n{doc.page_content}")
     return "\n\n".join(parts)
-
 
 def _extract_pages(docs) -> list[int]:
     pages = [doc.metadata.get("page") for doc in docs if doc.metadata.get("page")]
@@ -66,25 +96,6 @@ def answer(
     top_k: int = 5,
     filter: dict = None,
 ) -> dict:
-    """
-    Answer a question about a specific document using RAG.
-
-    Args:
-        question: Natural language question from the user.
-        doc_id:   Pinecone namespace — identifies the document.
-        top_k:    Number of chunks to retrieve (default 5).
-        filter:   Optional Pinecone metadata filter.
-                  e.g. {"risks": {"$ne": "None"}}
-
-    Returns:
-        {
-            "answer":          str,
-            "relevant_pages":  list[int],
-            "confidence":      str,
-            "caveat":          str,
-            "chunks_used":     int,
-        }
-    """
     if not question.strip():
         return {
             "answer": "Please provide a question.",
@@ -95,8 +106,6 @@ def answer(
         }
 
     retriever = get_retriever(doc_id=doc_id, top_k=top_k, filter=filter)
-
-    # Retrieve docs separately so we can extract page metadata
     retrieved_docs = retriever.invoke(question)
 
     if not retrieved_docs:
@@ -111,21 +120,32 @@ def answer(
     context = _format_docs(retrieved_docs)
     pages = _extract_pages(retrieved_docs)
 
-    # ── RAG chain ─────────────────────────────────────────────────────────
+    # RAG chain
     chain = _PROMPT | _llm | StrOutputParser()
-    raw_answer = chain.invoke({"context": context, "question": question})
+    raw = chain.invoke({"context": context, "question": question})
 
+    # Parse — same as summarization.py
+    cleaned = _remove_code_fences(raw)
+    cleaned = _extract_first_json_block(cleaned).strip()
+    parsed = _try_parse_json(cleaned)
+
+    if parsed:
+        confidence = parsed.get("confidence", "medium").lower()
+        if confidence not in ["high", "medium", "low"]:
+            confidence = "medium"
+        return {
+            "answer": parsed.get("answer", raw).strip(),
+            "relevant_pages": pages,
+            "confidence": confidence,
+            "caveat": parsed.get("caveat", "None"),
+            "chunks_used": len(retrieved_docs),
+        }
+
+    # fallback if JSON parsing fails
     return {
-        "answer": raw_answer.strip(),
+        "answer": raw.strip(),
         "relevant_pages": pages,
-        "confidence": _parse_field(raw_answer, "confidence"),
-        "caveat": _parse_field(raw_answer, "caveat"),
+        "confidence": "medium",
+        "caveat": "None",
         "chunks_used": len(retrieved_docs),
     }
-
-
-def _parse_field(text: str, field: str) -> str:
-    """Extract a labeled field from the LLM response if present."""
-    import re
-    match = re.search(rf"{field}:\s*(.+)", text, flags=re.IGNORECASE)
-    return match.group(1).strip() if match else "Not specified"
