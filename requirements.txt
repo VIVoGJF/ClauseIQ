@@ -13,15 +13,15 @@ langchain==0.3.27
 langchain-community==0.3.29
 langchain-core==0.3.84
 langchain-groq==0.2.4
-langchain-openai==0.3.16
+langchain-google-genai==2.0.10
 langchain-text-splitters==0.3.11
 
 # LLM / Embeddings
 groq==0.37.1
-openai==1.108.1
+google-generativeai
 
 # Vector store
-pinecone
+pinecone==7.3.0
 langchain-pinecone==0.2.13
 
 # API
