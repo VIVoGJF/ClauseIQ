@@ -8,15 +8,10 @@ from pinecone import Pinecone, ServerlessSpec
 
 load_dotenv()
 
-# -------------------------
-# Constants
-# -------------------------
-INDEX_NAME = "legal-docs"
-  # text-embedding-3-small output dimension
 
-# -------------------------
+INDEX_NAME = "legal-docs"
+
 # Clients
-# -------------------------
 _embeddings = GoogleGenerativeAIEmbeddings(
     model="models/gemini-embedding-001", 
     google_api_key=os.getenv("GOOGLE_API_KEY"),
@@ -26,11 +21,10 @@ _embeddings = GoogleGenerativeAIEmbeddings(
 _pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 
 
-# -------------------------
+
 # Index management
-# -------------------------
-def _ensure_index():
-    """Create Pinecone index if it doesn't exist."""
+def _ensure_index(): # Create Pinecone index if it doesn't exist
+    
     existing = _pc.list_indexes().names()
     if INDEX_NAME not in existing:
         _pc.create_index(
@@ -43,18 +37,10 @@ def _ensure_index():
             time.sleep(1)
 
 
-# -------------------------
-# Upsert
-# -------------------------
-def upsert_chunks(chunks: list[dict], doc_id: str):
-    """
-    Embed and upsert chunks into Pinecone under namespace=doc_id.
 
-    Args:
-        chunks: Output of chunking.chunk_pages() —
-                list of {"text": str, "metadata": dict}
-        doc_id: Used as Pinecone namespace for isolation per document.
-    """
+# Upsert
+def upsert_chunks(chunks: list[dict], doc_id: str):
+    
     _ensure_index()
 
     texts = [c["text"] for c in chunks]
@@ -69,22 +55,9 @@ def upsert_chunks(chunks: list[dict], doc_id: str):
     )
 
 
-# -------------------------
 # Retrieval
-# -------------------------
 def get_retriever(doc_id: str, top_k: int = 5, filter: dict = None):
-    """
-    Returns a LangChain retriever scoped to a single document namespace.
-
-    Args:
-        doc_id: Pinecone namespace to query within.
-        top_k:  Number of chunks to retrieve.
-        filter: Optional Pinecone metadata filter dict.
-                e.g. {"risks": {"$ne": "None"}}
-
-    Returns:
-        LangChain VectorStoreRetriever
-    """
+    
     vectorstore = PineconeVectorStore(
         index_name=INDEX_NAME,
         embedding=_embeddings,
@@ -100,9 +73,6 @@ def get_retriever(doc_id: str, top_k: int = 5, filter: dict = None):
 
 
 def delete_doc(doc_id: str):
-    """
-    Delete all vectors for a document by dropping its namespace.
-    Useful for cleanup after session ends.
-    """
+    
     index = _pc.Index(INDEX_NAME)
     index.delete(delete_all=True, namespace=doc_id)

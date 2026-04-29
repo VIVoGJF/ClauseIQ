@@ -3,12 +3,11 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from core.entities import extract_entities_clean
 from core.risks import extract_risk_categories
 
-# -------------------------
+
 # Splitter config
-# Tuned for legal prose:
-# - 1000 chars fits one legal clause comfortably
-# - 150 overlap preserves context across cuts
-# -------------------------
+# - 1000 chars  
+# - 150 overlap 
+
 _SPLITTER = RecursiveCharacterTextSplitter(
     chunk_size=1000,
     chunk_overlap=150,
@@ -17,29 +16,7 @@ _SPLITTER = RecursiveCharacterTextSplitter(
 
 
 def chunk_pages(pages_text: list[str], doc_id: str) -> list[dict]:
-    """
-    Split pages into chunks and enrich each chunk with entity metadata.
-
-    Args:
-        pages_text: Output of extraction.extract_text_pages() — one string per page.
-        doc_id:     Unique document identifier (used as Pinecone namespace).
-
-    Returns:
-        List of dicts:
-        {
-            "text":     str,
-            "metadata": {
-                "doc_id":      str,
-                "page":        int,
-                "chunk_index": int,
-                "preview":     str,       # first 80 chars of chunk
-                "parties":     str,       # comma-joined or "Not specified"
-                "dates":       str,
-                "money":       str,
-                "obligations": str,
-            }
-        }
-    """
+    
     chunks = []
     chunk_index = 0
 
@@ -47,14 +24,14 @@ def chunk_pages(pages_text: list[str], doc_id: str) -> list[dict]:
         if not page_text.strip():
             continue
 
-        # ── Split ────────────────────────────────────────────────────────
+        # Split 
         page_chunks = _SPLITTER.split_text(page_text)
 
         for chunk_text in page_chunks:
             if not chunk_text.strip():
                 continue
 
-            # ── Entity extraction per chunk ───────────────────────────────
+            # Entity extraction per chunk
             try:
                 entities = extract_entities_clean(chunk_text)
             except Exception as e:
@@ -68,8 +45,7 @@ def chunk_pages(pages_text: list[str], doc_id: str) -> list[dict]:
             
             
             risks = extract_risk_categories(chunk_text)
-            # ── Flatten list fields to strings for Pinecone metadata ──────
-            # Pinecone metadata values must be str / int / float / bool
+            # Flatten list fields to strings for Pinecone metadata
             def _join(val):
                 if isinstance(val, list):
                     return ", ".join(str(v) for v in val) if val else "Not specified"

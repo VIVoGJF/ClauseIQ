@@ -11,9 +11,8 @@ from rag.store import get_retriever
 
 load_dotenv()
 
-# -------------------------
+
 # LLM
-# -------------------------
 _llm = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0,
@@ -21,9 +20,8 @@ _llm = ChatGroq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
-# -------------------------
+
 # Prompt
-# -------------------------
 _PROMPT = ChatPromptTemplate.from_template("""
 You are a legal assistant specializing in Indian law.
 Answer the question using ONLY the context provided below.
@@ -44,9 +42,8 @@ Return a single JSON with exactly these keys:
 - "caveat": one line limitation or uncertainty, or "None"
 """)
 
-# -------------------------
-# Helpers — same pattern as summarization.py
-# -------------------------
+
+# Helpers 
 def _remove_code_fences(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -87,9 +84,8 @@ def _extract_pages(docs) -> list[int]:
     return sorted(set(pages))
 
 
-# -------------------------
+
 # Public API
-# -------------------------
 def answer(
     question: str,
     doc_id: str,

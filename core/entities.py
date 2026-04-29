@@ -25,10 +25,7 @@ _DATE_PATTERNS = [
 
 
 def extract_dates(text: str) -> list[str]:
-    """
-    HTML-formatted dates with context snippets.
-    Used by summarization.py → pdf_writer.py pipeline.
-    """
+   
     contextual_dates = []
     for pattern in _DATE_PATTERNS:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
@@ -44,9 +41,7 @@ def extract_dates(text: str) -> list[str]:
 
 
 def extract_dates_clean(text: str) -> list[str]:
-    """
-    Plain date strings with no HTML — used for Pinecone chunk metadata.
-    """
+    
     dates = []
     for pattern in _DATE_PATTERNS:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
@@ -61,10 +56,7 @@ def extract_dates_clean(text: str) -> list[str]:
 # Entity extraction
 # -------------------------
 def extract_entities(text: str) -> dict:
-    """
-    Full entity extraction with HTML-formatted dates.
-    Used by summarization.py pipeline.
-    """
+    
     doc = nlp(text)
 
     parties = [ent.text for ent in doc.ents if ent.label_ in ["ORG", "PERSON"]]
@@ -88,9 +80,7 @@ def extract_entities(text: str) -> dict:
 
 
 def extract_entities_clean(text: str) -> dict:
-    """
-    Plain entity extraction with no HTML — used for Pinecone chunk metadata.
-    """
+   
     doc = nlp(text)
 
     parties = [ent.text for ent in doc.ents if ent.label_ in ["ORG", "PERSON"]]

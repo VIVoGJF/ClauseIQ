@@ -6,18 +6,16 @@ from dotenv import load_dotenv
 import os
 from langchain_groq import ChatGroq
 
-# -------------------------
+
 # Load API key
-# -------------------------
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
 
 if not api_key:
     raise RuntimeError("GROQ_API_KEY not found. Please set it in .env or environment variables.")
 
-# -------------------------
+
 # LLM Wrapper
-# -------------------------
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0,
@@ -25,9 +23,8 @@ llm = ChatGroq(
     api_key=api_key
 )
 
-# -------------------------
+
 # Helpers
-# -------------------------
 def _remove_code_fences(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -56,9 +53,8 @@ def _try_parse_json(text: str):
     except Exception:
         return None
 
-# -------------------------
+
 # Main Summarizer
-# -------------------------
 def summarize_document(text: str, entities: dict, risks: dict, max_attempts: int = 2) -> str:
     """
     Passes extracted text/entities/risks to Gemini and returns a clean JSON string.
