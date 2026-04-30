@@ -15,7 +15,6 @@ INDEX_NAME = "legal-docs"
 _embeddings = GoogleGenerativeAIEmbeddings(
     model="models/gemini-embedding-001", 
     google_api_key=os.getenv("GOOGLE_API_KEY"),
-    output_dimensionality=1536
     )
 
 _pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
