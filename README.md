@@ -4,7 +4,7 @@ An AI-powered legal document intelligence platform that **extracts, analyzes, an
 
 It combines **OCR, NLP (spaCy, Regex), Groq LLaMA, Gemini Embeddings, and Pinecone** to deliver structured insights: parties, dates, obligations, money/penalties, risks, and suggestions — with a built-in **RAG Q&A engine** for deep document interrogation.
 
-Link : [ClauseIQ.app](https://clause-iq.streamlit.app/)
+Link: [ClauseIQ](https://clause-iq.streamlit.app/)
 ---
 
 ## ✨ Features
