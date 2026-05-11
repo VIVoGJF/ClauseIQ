@@ -14,9 +14,32 @@ else:  # Linux / Mac / Render / Docker
 
 
 # Helpers
-def _extract_text_pymupdf(page: fitz.Page) -> str: # Extract selectable text from a PyMuPDF page object
+
+def _ocr_image(img: Image.Image) -> str: # Render page to image and run Tesseract OCR on it
+
+    return pytesseract.image_to_string(img)
+
+
+def _extract_text_pymupdf(doc: fitz.Document, page: fitz.Page) -> str:
     
-    return page.get_text("text") or ""
+    extracted_text = []
+
+    text = page.get_text("text") or ""
+    if text.strip():
+        extracted_text.append(text.strip())
+
+
+    images = page.get_images(full=True)
+    for img in images:
+        xref = img[0]
+        base_image = doc.extract_image(xref)
+        image_bytes = base_image["image"]
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        image_text = _ocr_image(pil_image)
+        if image_text.strip():
+            extracted_text.append(image_text.strip())
+
+    return "\n".join(extracted_text).strip()
 
 
 def _page_to_pil(page: fitz.Page, dpi: int = 300) -> Image.Image: # Render a PyMuPDF page to a PIL Image for OCR
@@ -27,11 +50,6 @@ def _page_to_pil(page: fitz.Page, dpi: int = 300) -> Image.Image: # Render a PyM
     img_bytes = pixmap.tobytes("png")
     return Image.open(io.BytesIO(img_bytes))
 
-
-def _ocr_page(page: fitz.Page) -> str: # Render page to image and run Tesseract OCR on it
-    
-    img = _page_to_pil(page)
-    return pytesseract.image_to_string(img)
 
 
 # Core extraction
@@ -49,7 +67,7 @@ def extract_text_pages(pdf_path: str, use_ocr: bool = True) -> list[str]:
             #PyMuPDF
             text = ""
             try:
-                text = _extract_text_pymupdf(page)
+                text = _extract_text_pymupdf(doc, page)
             except Exception as e:
                 print(f"[PyMuPDF] Failed on page {page_num}: {e}")
 
@@ -57,7 +75,8 @@ def extract_text_pages(pdf_path: str, use_ocr: bool = True) -> list[str]:
             if use_ocr and (not text.strip() or len(text.strip()) < 10):
                 try:
                     print(f"[OCR] Falling back to Tesseract on page {page_num}")
-                    ocr_text = _ocr_page(page)
+                    img = _page_to_pil(page)
+                    ocr_text = _ocr_image(img)
                     text = text + "\n" + ocr_text.strip()
                 except Exception as e:
                     print(f"[OCR] Failed on page {page_num}: {e}")
