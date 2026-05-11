@@ -64,14 +64,14 @@ def extract_text_pages(pdf_path: str, use_ocr: bool = True) -> list[str]:
     with fitz.open(str(pdf_file)) as doc:
         for page_num, page in enumerate(doc, start=1):
 
-            #PyMuPDF
+            #PyMuPDF + OCR for images within page
             text = ""
             try:
                 text = _extract_text_pymupdf(doc, page)
             except Exception as e:
                 print(f"[PyMuPDF] Failed on page {page_num}: {e}")
 
-            #OCR fallback
+            #OCR fallback for PyMuPDF text extraction failures
             if use_ocr and (not text.strip() or len(text.strip()) < 10):
                 try:
                     print(f"[OCR] Falling back to Tesseract on page {page_num}")
